@@ -1,24 +1,51 @@
 const std = @import("std");
 
+// We want to hide this from the user
+const InternalError = error{Internal};
+
+// We want to expose this to the user
+pub const PublicError = error{Public};
+
+fn internal_function() !u32 {
+    if (true) {
+        return error.Internal;
+    } else {
+        return error.PublicError;
+    }
+    return 1;
+}
+
+// Handles the Internal error but exposes the Public error
+fn public_api() PublicError!u32 {
+    if (internal_function()) |result| {
+        return result;
+    } else |err| switch (err) {
+        error.Internal => return 0,
+        // err can no longer be error.Internal
+        else => return err,
+    }
+}
+
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
-
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try bw.flush(); // don't forget to flush!
+    const a = public_api();
+    try std.debug.assert(a == 0);
 }
 
 test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+    const a = public_api();
+    try std.testing.expectEqual(a, 0);
 }
+
+// We get this error when running zig test::::
+
+// $ zig test src/main.zig
+//
+// src/main.zig:24:24: error: expected type 'error{Public}', found '@typeInfo(@typeInfo(@TypeOf(main.internal_function)).Fn.return_type.?).ErrorUnion.error_set'
+//         else => return err,
+//                        ^~~
+// src/main.zig:24:24: note: 'error.Internal' not a member of destination error set
+// referenced by:
+//     test.simple test: src/main.zig:34:15
+//     remaining reference traces hidden; use '-freference-trace' to see all reference traces
+
+// I would've expected the compiler to figure out that `err` can no longer be `error.Internal` and remove that from the derived error set.
