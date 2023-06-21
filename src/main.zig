@@ -36,7 +36,7 @@ test "simple test" {
     try std.testing.expectEqual(a, 0);
 }
 
-// We get this error when running zig test::::
+// We get this error when running zig test:
 
 // $ zig test src/main.zig
 //
